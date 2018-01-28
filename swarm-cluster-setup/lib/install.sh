@@ -6,8 +6,14 @@ sudo service docker start
 sudo chkconfig docker on
 
 #update this to just open needed ports
-firewall-cmd --zone=public --add-port=2377/tcp --permanent
-firewall-cmd --reload
+echo running firewall-cmd --zone=public --add-port=2377/tcp --permanent
+sudo firewall-cmd --zone=public --add-port=2377/tcp --permanent
+echo running sudo firewall-cmd --reload
+sudo firewall-cmd --reload
 
 #initialize swarm on master node
-[ $(hostname -s) == "swarmnode1" ] && docker swarm init --advertise-addr $ip > ~/joinswarm.txt
+if [ $(hostname -s) == "swarmnode1" ]
+then
+    sudo docker swarm init --advertise-addr $ip > ~/joinswarm.txt
+fi
+
