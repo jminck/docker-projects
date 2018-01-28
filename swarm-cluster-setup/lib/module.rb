@@ -26,7 +26,7 @@ module Vagrant
             end
 
             def get_vm_name(index)
-                "vm#{index}"
+                "swarmnode#{index}"
             end
 
             def get_vm_ip(index)
