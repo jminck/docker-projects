@@ -1,1 +1,0 @@
-{"virtualbox":{"vagrant-root":{"id":"vagrant-root","mount_options":["dmode=777","fmode=777","uid=501","gid=501"],"guestpath":"/vagrant","hostpath":"/home/vagrant/docker-projects/swarm-cluster-setup","disabled":false,"__vagrantfile":true}}}
