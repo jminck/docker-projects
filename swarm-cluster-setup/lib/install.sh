@@ -1,7 +1,7 @@
 #install docker on all nodes
 curl -L get.docker.com | sh
 
-ip=$(ifconfig enp0s8 | grep mask | awk '{print $2}'| cut -f2 -d:)
+#ip=$(ifconfig enp0s8 | grep mask | awk '{print $2}'| cut -f2 -d:)
 sudo service docker start
 sudo chkconfig docker on
 
