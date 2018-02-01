@@ -5,7 +5,7 @@ services:
   drupal:
     image: drupal:8.2
     ports:
-      - "8080:80"
+      - "8880:80"
     volumes:
       - drupal-modules:/var/www/html/modules
       - drupal-profiles:/var/www/html/profiles       
@@ -16,6 +16,8 @@ services:
     image: postgres:9.6
     environment:
       - POSTGRES_PASSWORD_FILE=/run/secrets/psql-pw
+    secrets:
+      - psql-pw
     volumes:
       - drupal-data:/var/lib/postgresql/data
 

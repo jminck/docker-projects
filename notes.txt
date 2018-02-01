@@ -1,0 +1,412 @@
+#########################################################
+# initial powershell setup from
+# https://docs.docker.com/docker-for-windows/#general
+
+Set-ExecutionPolicy RemoteSigned
+Install-Module posh-docker
+Import-Module posh-docker
+
+if (-Not (Test-Path $PROFILE)) {
+    New-Item $PROFILE –Type File –Force
+}
+
+Add-Content $PROFILE "`nImport-Module posh-docker"
+
+#install docker machine with windows git bash
+if [[ ! -d "$HOME/bin" ]]; then mkdir -p "$HOME/bin"; fi && \
+curl -L https://github.com/docker/machine/releases/download/v0.13.0/docker-machine-Windows-x86_64.exe > "$HOME/bin/docker-machine.exe" && \
+chmod +x "$HOME/bin/docker-machine.exe"
+
+
+#########################################################
+# linux install notes
+
+#avoid needing to sudo every command
+#doesn't work on RHEL based distros like CentOS
+sudo usermod -aG docker <user>
+
+#install docker machine 
+curl -L https://github.com/docker/machine/releases/download/v0.13.0/docker-machine-`uname -s`-`uname -m` >/tmp/docker-machine && \
+chmod +x /tmp/docker-machine && \
+sudo cp /tmp/docker-machine /usr/local/bin/docker-machine
+
+#install docker compose
+curl -L https://github.com/docker/compose/releases/download/1.18.0-rc2/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+
+######################################################
+# getting started command lines
+docker version
+
+docker container run -d --publish 81:80 --name webserver nginx
+docker container ls
+docker container logs webserver
+docker container top webserver
+docker container stop (ID or unique subset, can be multple)
+docker container rm (ID or unique subset, can be multple)
+
+
+docker container run -d --publish 81:80 --name nginx nginx
+docker container run -d --publish 8080:80 --name httpd httpd
+docker container run -d --publish 3306:3306 --name mysql -e MYSQL_RANDOM_ROOT_PASSWORD=yes mysql
+#get password
+docker container logs mysql
+
+#list containers
+docker container ps -a
+
+#stop all containers:
+docker kill $(docker ps -q) 
+#remove all containers
+docker rm $(docker ps -a -q)
+
+################################################################
+# what's going on in containers
+
+#snapshot
+docker container top
+#json dump of container details
+docker container inspect
+docker container inspect --format '{{ .Name }} {{ .Config.Hostname }} {{ .State.Status}} {{.NetworkSettings.IPAddress }} {{ .HostConfig.PortBindings }}' <id>
+#like top in linux
+docker container stats
+
+# launch container interactively -i interactrive -t pseudo tty (last arg is override command line to launch)
+docker container run -it --publish 81:80 --name nginx nginx bash 
+
+#execute something inside the container (in this case interactive bash shell)
+docker container exec -it nginx bash
+
+#tiny distro ~5 megs alpine 
+#apk is package manager
+docker container exec -it nginx sh
+apk add bash curl wget
+
+#network commands
+#show networks
+docker network ls
+
+#inspect a network
+docker network inspect
+
+#create a network
+docker network create my_net
+
+#connect new container to specific network
+docker container run -it --publish 81:80 --network my_net --name nginx nginx bash 
+
+#connect existing container to specific network
+docker network connect my_net dazzling_hamilton
+docker network inspect my_net
+
+# search docker hub
+docker search --format "{{.Name}}: {{.StarCount}}" ubuntu
+docker search --format "table {{.Name}}\t{{.IsAutomated}}\t{{.IsOfficial}}" nginx
+
+# create multiple containers responding to same name
+docker run -d --network my_net --net-alias es elasticsearch:2
+docker run -d --network my_net --net-alias es elasticsearch:2
+docker run -it --network my_net centos bash
+    #repeat this looking for name to change
+    yum update
+    yum install bind-utils
+    nslookup es
+    curl -s es:9200
+
+#show image creation history
+docker image history nginx:latest
+docker image inspect nginx:latest
+
+#tag and upload an image to docker hub
+docker login #after login, creds are stored in  ~/.docker/config.json
+docker image tag nginx jminck/nginx
+docker image push jminck/nginx
+#add another tag and push it
+docker image push jminck/nginx:latestandgreatest 
+docker image tag nginx jminck/nginx:latestandgreatest
+
+####################################################################
+# specify a persistant data volume name
+# mount to ./data subfolder on host
+docker run -it -v data:/mnt/data centos bash
+#full path on host
+docker run -it -v /mnt/docker/data:/mnt/data centos bash
+#syntax for Windows host
+docker run -it -v //d/docker/data:/mnt/data centos bash
+#
+docker run -it -v //d/docker/data:/mnt/data centos bash
+
+docker volume ls
+docker volume inspect data
+
+
+########################################################################
+# minor version upgrade of db container while retaining data
+docker run -d -v postgresdata:/var/lib/postgresql/data --publish 5432 --net-alias postgres postgres:9.6.1
+#stop container, then run
+docker run -d -v postgresdata:/var/lib/postgresql/data --publish 5432 --net-alias postgres postgres:9.6.2
+#check version, launch another container and conect to postgres
+docker run -it --net my_net centos bash
+    yum update -y
+    yum install postgresql -y
+    psql -h postgres -p 5432
+
+# ELK stack with x-pack https://github.com/deviantony/docker-elk/tree/x-pack
+git pull -b x-pack https://github.com/deviantony/docker-elk.git
+
+
+#############################################################################
+# swarm
+#initialize a swarm
+docker swarm init
+
+#create a swarm service
+docker service create alpine ping 8.8.8.8
+
+#get services
+docker service ls
+
+#get container details of a service
+docker service ps t0gj86x371ju
+
+#change a service
+docker service update t0gj86x371ju --replicas 3
+
+##############################################################################
+# setup multinode swarm with docker-machine
+
+#create docker nodes on virtualbox host
+docker-machine create node1
+docker-machine create node2
+docker-machine create node3
+
+#connect to a created node
+docker-machine ssh node1
+
+#switch the docker host you talk to
+eval $(docker-machine env node1)
+
+# create a swarm on node1
+docker swarm init --advertise-addr 192.168.99.101
+
+# join swarm on node 2-3 -note, can only use swarm commands on manager node
+docker swarm join --token SWMTKN-1-5r1ws5w8zhrrdbcm6ebj3cvso8uknp3hp1bp512a5epxedg9vc-1w6sjvfo57sms08qw06g2xyin 192.168.99.101:2377
+
+#make a worker node a manager
+docker node update --role manager swarm2
+
+#show swarm member details
+docker node ls
+docker node ps <optional node name>
+
+#create a service
+docker service create --replicas 10 alpine ping 8.8.8.8
+
+#verify service created and spread across nodes
+docker service ls
+docker service ps <id>
+
+#create drupal on swarm with overlay network
+docker network create --driver overlay mydrupal
+docker network ls
+docker service create --name psql --mount type=volume,source=db-data,target=/var/lib/postgresql/data --network mydrupal -e POSTGRES_PASSWORD=postgres postgres
+docker service create --name drupal --network mydrupal -p 8082:80 drupal
+docker service ls
+docker service ps <id>
+
+
+######################################################################
+# multi-tier swarm service with multiple networks and data volume
+docker network create --driver overlay frontend
+docker network create --driver overlay backend
+docker service create --name db --mount type=volume,source=db-data,target=/var/lib/postgresql/data --network backend -e POSTGRES_PASSWORD=postgres postgres:9.4 
+docker service create --name vote --network frontend --replicas 2 -p 85:80 dockersamples/examplevotingapp_vote:before
+docker service create --name redis --network frontend --replicas 2 redis:3.2
+docker service create --name worker --network frontend --network backend --replicas 1 dockersamples/examplevotingapp_worker
+#docker service update --network-add backend worker
+docker service create --name result --network backend --replicas 1 -p 5001:80 dockersamples/examplevotingapp_result:before
+
+
+######################################################################
+# using a compose file to deploy a docker swarm stack
+docker stack deploy -c .\udemy-docker-mastery\swarm-stack-1\example-voting-app-stack.yml voteapp
+
+######################################################################
+# secrets
+# --secret gives access to the service's containers
+# startup of image expands secrets into ENV variables and replaces file path to secret with the contents of the secret
+
+echo postgres | docker secret create psql_user -
+echo postgres | docker secret create psql_pass -
+docker create --name psql psql_user --secret psql_pass -e POSTGRES_PASSWORD_FILE=/run/secrets/psql_pass -e POSTGRES_USER_FILE=/run/secrets/psql_user postgres
+
+
+######################################################################
+# deploy a stack with secrets
+
+echo "postgres" | docker secret create psql-pw -
+docker stack deploy -c .\udemy-docker-mastery\secrets-assignment-1\docker-compose.yml drupal
+
+docker stack ls
+docker stack ps drupal
+docker service ls
+docker service ps drupal_postgres
+
+
+######################################################################
+# using secrets with compose (swarm is the thing that provides secrets)
+# this is for dev only, secret storage is insecure
+# .\udemy-docker-mastery\secrets-sample-2\docker-compose.yml 
+docker-compose up -d
+#secret is visible, loaded from file - does not work with external
+docker-compose exec psql cat /run/secrets/psql_user
+
+
+######################################################################
+# lifecycle updates
+
+# rev version of a container used in a service
+docker service update --image myapp:1.2.1 <servicename>
+
+#add env variable and remove a port
+docker service update --env-add NODE_ENV=production --publish-rm 8080
+
+#change number of replicas of two services
+docker service scale web=8 api=6
+
+docker serivce create -p 8088:80 --name web nginx:1.13.7
+docker service ls
+#scale servie up
+docker service scale web=5
+#rev image down
+docker service update --image nginx:1.13.6 web
+#change port bindings
+docker service update --publish-rm 8088 --publish-add 9090:80 web
+#force an update to cause rebalancing if containers aren't balanced across hosts
+docker service update --force web
+
+######################################################################
+# Docker healthchecks
+
+#view if containers have healthchecks enabled
+docker container ls
+#get status of last 5 health cherks
+docker container inspect <ID>
+
+# || false is a way to get a return of 0 or 1 from curl
+docker run --health-cmd="curl -f localhost:9200/_cluster/health || false" --health-interval=5s --health-retries=3 \
+--health-timeout=2s --health-start-period=15s elasticsearch:2 
+
+#health check on a postgres service
+docker service create --name p2 --health-cmd="pg_isready -U postgres || exit 1" postgres
+
+
+######################################################################
+# docker repo / cache
+ docker container run -d -p 5000:5000 --name registry registry
+
+ docker pull hello-world
+
+ # tag with repo info
+ docker tag hello-world 127.0.0.1:5000/hello-world
+
+ #push to local repo
+ docker push 127.0.0.1:5000/hello-world
+
+ docker image rm 127.0.0.1:5000/hello-world
+
+ docker pull 127.0.0.1:5000/hello-world
+
+ #recreate registry with named storage
+  docker container kill registry
+
+ docker container rm registry
+
+ #show contents of a private registry
+ curl http://127.0.0.1:5000/v2/_catalog
+
+ docker container run -d -p 5000:5000 --name registry -v $(pwd)/registry-data:/var/lib/registry registry
+
+ #show tree from host
+ tree -h registry-data
+
+ # show commands in real time when creating a service
+ docker service create --name nginx -p 80:80 --replicas 5 --detach=-false 127.0.0.1:5000/nginx
+
+ ####################################################################
+ # push an image to docker hub
+ docker login -u jminck -p <password>
+ docker push jminck/hello-world
+
+
+####################################################################
+# use a remote filesystem for a volume mount
+
+#use SSH volumue driver
+docker plugin install --grant-all-permissions vieux/sshfs
+
+docker volume create --driver vieux/sshfs \
+-o sshcmd=root@192.168.1.104:/home/nfs/durpal/data \
+-o password=! \
+sshvolume
+
+docker run -it --rm --name sshfs-container --mount type=volume,volume-driver=vieux/sshfs,src=sshvolume,target=/app nginx:latest bash
+
+docker service create --name db --mount type=volume,volume-driver=vieux/sshfs,src=sshvolume,target=/var/lib/postgresql/data --network backend -e POSTGRES_PASSWORD=postgres postgres:9.4 
+
+#####################################################################
+# admin and housekeeping commands
+
+# resources being consumed by volumes, containers, etc.
+docker system df
+
+docker system prune
+
+#best practice - don't run tasks on manager nodes
+docker node update --availability drain <manager>
+
+#visualization of raft consensus
+docker service create --publish 88:80 aaabbb000/nginx-raftscope
+
+#https://www.youtube.com/watch?v=Qsv-q8WbIZY
+#https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying
+
+# https://github.com/docker/swarmkit
+docker run -it appcelerator/swarmkit bash
+
+# visualization of cluster
+docker service create   --name=dsv   --publish=8080:8080/tcp   --constraint=node.role==manager   --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock  dockersamples/visualizer
+
+#label swarm members
+docker node update --label-add dc=1 swarmnode1.es.dev
+docker node update --label-add dc=2 swarmnode2.es.dev
+docker node update --label-add dc=1 swarmnode3.es.dev
+docker node update --label-add dc=2 swarmnode4.es.dev
+
+#specify placement preference, should spread evenly across nodes with dc=<something>
+docker service create --name redis --replicas 12 --placement-pref 'spread=node.labels.dc' redis
+
+# regain quorum
+#1 - bring downed nodes back online
+#2 - on a healthy manager run:
+docker swarm init --force-new-cluster
+
+# restore from backup
+# 1 - bring up new manager and stop docker
+# 2 - sudo rm -rf /var/lib/docker/swarm
+# 3 - copy backup to /var/lib/docker/swarm
+# 4 - start docker
+# 5 - docker swarm init --force-new-cluster
+
+
+
+
+# useful images
+# visualizer web gui
+docker service create   --name=dsv   --publish=8080:8080/tcp   --constraint=node.role==manager   --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock  dockersamples/visualizer
+#powershell linux container
+docker run -it --rm microsoft/powershell
+
+docker run -it --rm microsoft/azure-cli
+

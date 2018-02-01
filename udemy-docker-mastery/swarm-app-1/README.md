@@ -7,6 +7,16 @@
 - a `backend` and `frontend` overlay network are needed. Nothing different about them other then that backend will help protect datatbase from the voting web app. (similar to how a VLAN setup might be in traditional archecture)
 - The database server should use a named volume for perserving data. Use the new `--mount` format to do this: `--mount type=volume,source=db-data,target=/var/lib/postgresql/data`
 
+
+docker network create --driver overlay frontend
+docker network create --driver overlay backend
+docker service create --name db --mount type=volume,source=db-data,target=/var/lib/postgresql/data --network backend -e POSTGRES_PASSWORD=postgres postgres:9.4 
+docker service create --name vote --network frontend --replicas 2 -p 85:80 dockersamples/examplevotingapp_vote:before
+docker service create --name redis --network frontend --replicas 2 redis:3.2
+docker service create --name worker --network frontend --network backend --replicas 1 dockersamples/examplevotingapp_worker
+#docker service update --network-add backend worker
+docker service create --name result --network backend --replicas 1 -p 5001:80 dockersamples/examplevotingapp_result:before
+
 ### Services (names below should be service names)
 - vote
     - dockersamples/examplevotingapp_vote:before
