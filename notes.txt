@@ -244,6 +244,7 @@ docker create --name psql psql_user --secret psql_pass -e POSTGRES_PASSWORD_FILE
 
 ######################################################################
 # deploy a stack with secrets
+# version of compose file has to be 3.1 or newer to use secrets
 
 echo "postgres" | docker secret create psql-pw -
 docker stack deploy -c .\udemy-docker-mastery\secrets-assignment-1\docker-compose.yml drupal
@@ -262,6 +263,8 @@ docker-compose up -d
 #secret is visible, loaded from file - does not work with external
 docker-compose exec psql cat /run/secrets/psql_user
 
+#when compose file creates secrets for a stack, it will remove the secrets when tearing down the stack
+docker-projects\udemy-docker-mastery\secrets-sample-2\docker-compose.yml
 
 ######################################################################
 # lifecycle updates
@@ -275,9 +278,9 @@ docker service update --env-add NODE_ENV=production --publish-rm 8080
 #change number of replicas of two services
 docker service scale web=8 api=6
 
-docker serivce create -p 8088:80 --name web nginx:1.13.7
+docker service create -p 8088:80 --name web nginx:1.13.7
 docker service ls
-#scale servie up
+#scale service up
 docker service scale web=5
 #rev image down
 docker service update --image nginx:1.13.6 web
@@ -376,16 +379,7 @@ docker service create --publish 88:80 aaabbb000/nginx-raftscope
 docker run -it appcelerator/swarmkit bash
 
 # visualization of cluster
-docker service create   --name=dsv   --publish=8080:8080/tcp   --constraint=node.role==manager   --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock  dockersamples/visualizer
-
-#label swarm members
-docker node update --label-add dc=1 swarmnode1.es.dev
-docker node update --label-add dc=2 swarmnode2.es.dev
-docker node update --label-add dc=1 swarmnode3.es.dev
-docker node update --label-add dc=2 swarmnode4.es.dev
-
-#specify placement preference, should spread evenly across nodes with dc=<something>
-docker service create --name redis --replicas 12 --placement-pref 'spread=node.labels.dc' redis
+docker service create   --name=dsv   --publish=8080:8080/tcp   --constraint node.role==manager   --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock  dockersamples/visualizer
 
 # regain quorum
 #1 - bring downed nodes back online
@@ -401,7 +395,6 @@ docker swarm init --force-new-cluster
 
 
 
-
 # useful images
 # visualizer web gui
 docker service create   --name=dsv   --publish=8080:8080/tcp   --constraint=node.role==manager   --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock  dockersamples/visualizer
@@ -410,3 +403,69 @@ docker run -it --rm microsoft/powershell
 
 docker run -it --rm microsoft/azure-cli
 
+
+######################################################################
+# deploy and view stack info
+
+#would do initial deploy this way, as well as an update after changing a setting in the YML
+sudo docker stack deploy -c udemy-docker-mastery\swarm-stack-1\example-voting-app-stack.yml voteapp
+
+docker stack ls
+
+docker stack ps voteapp
+
+docker stack services voteapp
+
+##################################################################################
+# different compose files for test/prod/defaults
+# docker-projects\udemy-docker-mastery\swarm-stack-3
+
+# combines docker-compose.yml and docker-compose.override.yml
+docker-compose up -d
+
+# on our CI solution - base file first, then customizations
+docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d
+
+#validate combined config file result, outpus to file that would be used in production
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml config > output.yml
+
+
+##################################################################################
+# placement constraints
+
+docker service create   --name=dsv   --publish=8080:8080/tcp   --constraint node.role==manager   --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock  dockersamples/visualizer
+
+docker node update --label-add dmz=true swarmnode5.es.dev
+docker service create   --name=dmx-nginx  --constraint node.labels.dmz==true --replicas 2 nginx
+
+#global mode places 1 instance on each host in the swarm
+docker service create -p 8088:80 --mode=global --name web nginx:1.13.7
+
+
+#label swarm members
+docker node update --label-add dc=1 swarmnode1.es.dev
+docker node update --label-add dc=2 swarmnode2.es.dev
+docker node update --label-add dc=1 swarmnode3.es.dev
+docker node update --label-add dc=2 swarmnode4.es.dev
+
+#specify placement preference, should spread evenly across nodes with dc=<something>
+docker service create --name redis --replicas 12 --placement-pref 'spread=node.labels.dc' redis
+
+docker node update --label-add azone=1 swarmnode1.es.dev
+docker node update --label-add azone=2 swarmnode2.es.dev
+docker node update --label-add azone=3 swarmnode3.es.dev
+docker node update --label-add azone=1 swarmnode4.es.dev
+docker node update --label-add azone=2 swarmnode5.es.dev
+
+docker service create --placement-pref spread=node.labels.azone --replicas 15 --name azonesnginx nginx
+
+#hard constraint on a label
+docker service create --constraint='node.labels.dc==1' --replicas 8 --name azonesnginx nginx
+
+#hard reservation of memory and CPU of host
+docker service create  --reserve-memory 800M  --env MYSQL_ROOT_PASSWORD=Password1234 --reserve-cpu 1 mysql
+
+#hard limit of resources
+docker service create --limit-memory 150M --limit-cpu .25 --name mynginx nginx
+#remove limit
+docker service update --limit-memory 0 --limit-cpu 0 mynginx 
