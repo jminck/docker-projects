@@ -15,7 +15,7 @@ module Vagrant
                 @params = [
                     'cluster_name' => ['CLUSTER_NAME', 'cluster_name', 'dev-swarm-cluster'],
                     'cluster_ip' => ['CLUSTER_IP_PATTERN', 'cluster_ip', '10.1.1.%d'],
-                    'cluster_count' => ['CLUSTER_COUNT', 'cluster_count', 4],
+                    'cluster_count' => ['CLUSTER_COUNT', 'cluster_count', 5],
                     'cluster_ram' => ['CLUSTER_RAM', 'cluster_ram', 4096],
                     'cluster_cpu' => ['CLUSTER_CPU', 'cluster_cpu', 1],
                 ]
