@@ -16,9 +16,16 @@ sudo firewall-cmd --reload
 sudo systemctl restart firewalld
 sudo service docker restart
 
+#install docker command completion
+apt-get install bash-completion
+sudo curl -L https://raw.githubusercontent.com/docker/machine/v0.13.0/contrib/completion/bash/docker-machine.bash -o /etc/bash_completion.d/docker-machine
+
 #install docker compose
 sudo curl -L https://github.com/docker/compose/releases/download/1.18.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
+#install docker compose autocompletion
+sudo curl -L https://raw.githubusercontent.com/docker/compose/1.18.0/contrib/completion/bash/docker-compose -o /etc/bash_completion.d/docker-compose
+
 
 #initialize swarm on master node
 if [ $(hostname -s) == "swarmnode1" ]
