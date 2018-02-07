@@ -469,3 +469,17 @@ docker service create  --reserve-memory 800M  --env MYSQL_ROOT_PASSWORD=Password
 docker service create --limit-memory 150M --limit-cpu .25 --name mynginx nginx
 #remove limit
 docker service update --limit-memory 0 --limit-cpu 0 mynginx 
+
+
+###########################################################################################
+# swarm configs
+# map files/strings store in Raft log to any file path in tasks
+# ideal for nginx/mysql/etx. configs
+# udemy-docker-mastery\swarm-stack-6\
+
+docker config create nginx01 ./nginx.conf
+docker service create --config source=nginx01,target=/etc/nginx/conf.d/default.conf
+
+docker config create nginx-app-02062018 ./nginx-app-02062018.conf
+docker service create --config  source=nginx-app-02062018,target=/etc/nginx/conf.d/default.conf -p 9000:80
+

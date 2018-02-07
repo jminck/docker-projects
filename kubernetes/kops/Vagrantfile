@@ -1,0 +1,79 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+require 'erb'
+require_relative 'lib/module.rb'
+
+
+utils = Vagrant::KubernetesCluster::Util.new
+
+Vagrant.configure("2") do |config|
+
+    utils.manage_and_print_config
+
+    nodes_number = utils.get_cluster_info 'cluster_count'
+    nodes_number = nodes_number.to_i
+
+    cluster_ram = utils.get_cluster_info 'cluster_ram'
+    cluster_ram = cluster_ram.to_i
+
+    cluster_cpu = utils.get_cluster_info 'cluster_cpu'
+    cluster_cpu = cluster_cpu.to_i
+
+    #config.vm.box = 'chef/centos-7.1'
+    config.vm.box = 'ubuntu/xenial64'
+    config.ssh.insert_key = false
+
+    # Virtualbox
+    config.vm.provider 'virtualbox' do |vbox, override|
+        override.vm.synced_folder ".", "/vagrant", :id => "vagrant-root",
+            :mount_options => ['dmode=777', 'fmode=777']
+        vbox.customize ['modifyvm', :id, '--memory', cluster_ram]
+        vbox.customize ['modifyvm', :id, '--cpus', cluster_cpu]
+        vbox.gui = false
+    end
+
+    # Parallels
+    config.vm.provider "parallels" do |v, override|
+        override.vm.box = "parallels/centos-7.1"
+        #v.update_guest_tools = true
+        v.optimize_power_consumption = false
+        v.memory = cluster_ram
+        v.cpus = cluster_cpu
+    end
+
+    # VMWare
+    ["vmware_fusion", "vmware_workstation"].each do |vmware|
+        config.vm.provider vmware do |v|
+            v.vmx["memsize"] = cluster_ram
+            v.vmx["numvcpus"] = cluster_cpu
+            v.gui = false
+        end
+    end
+
+
+    # ES Nodes
+    (1..nodes_number).each do |index|
+        name = utils.get_vm_name index
+        node_name = utils.get_node_name index
+        ip = utils.get_vm_ip index
+        primary = (index.eql? 1)
+
+        config.vm.define :"#{name}", primary: primary do |node|
+            node.vm.hostname = "#{name}"
+            node.vm.network 'public_network', bridge: "p3p1"
+            node.vm.provision "shell", path: "lib/install.sh"
+
+            node.vm.provider "parallels" do |v|
+                v.name = "k8skops-#{name}"
+            end
+            node.vm.provider "virtualbox" do |v|
+                v.name = "k8skops-#{name}"
+            end
+            ["vmware_fusion", "vmware_workstation"].each do |vmware|
+                node.vm.provider vmware do |v|
+                    v.vmx["displayname"] =  "k8skops-#{name}"
+                end
+            end
+        end
+    end
+end
