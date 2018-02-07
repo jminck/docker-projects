@@ -22,6 +22,8 @@ Vagrant.configure("2") do |config|
     #config.vm.box = 'chef/centos-7.1'
     config.vm.box = 'ubuntu/xenial64'
     config.ssh.insert_key = false
+    config.ssh.username = "vagrant"
+    config.ssh.password = "vagrant"
 
     # Virtualbox
     config.vm.provider 'virtualbox' do |vbox, override|
