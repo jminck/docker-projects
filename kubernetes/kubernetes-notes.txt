@@ -1,0 +1,139 @@
+
+#i have dns domain minckler.de registered and managed by route53
+kops create cluster --name=minckler.de --state=s3://jminck-kops-state --zones=us-east-1a,us-east-1b,us-east-1c --node-count=2 --node-size=t2.micro --master-size=t2.micro --dns-zone=minckler.de
+cat ~/.kube/config
+kops edit cluster --name=minckler.de --state=s3://jminck-kops-state
+kops update cluster minckler.de --yes --state=s3://jminck-kops-state
+kops delete cluster --name minckler.de --state=s3://jminck-kops-state --yes
+
+kubectl get nodes --show-labels
+ssh -i ~/.ssh/id_rsa admin@api.minckler.de
+kops validate cluster
+
+kubectl run hello-minikube --image=gcr.io/google_containers/echoserver:1.4 --port=8080
+kubectl get service
+kubectl expose deployment hello-minikube --type=NodePort
+
+kubectl get deployments hello-minikube
+kubectl describe deployments hello-minikube
+kubectl logs deployment/hello-minikube
+
+aws ec2 describe-security-groups --filters Name=group-name,Values='*minckler*' --query 'SecurityGroups[*].{Name:GroupName,ID:GroupId}'
+aws ec2 authorize-security-group-ingress --group-id sg-80a3cff7 --protocol tcp --port 32440 --cidr 0.0.0.0/0
+
+sudo kubectl get pod
+
+#kubernetes/kubernetes-course/first-app
+kubectl create -f first-app/helloworld.yml
+kubectl get pod
+kubectl describe pod
+kubectl port-forward nodehelloworld.example.com 8081:3000
+kubectl expose pod nodehelloworld.example.com --type=NodePort --name nodehelloworldservice
+
+kubectl attach <pod>
+kubectl exec nodehelloworld.example.com -- ls /app
+#launch bash on container
+kubectl exec --tty=true --stdin=true  nodehelloworld.example.com bash
+kubectl describe service nodehelloworldservice
+
+#launch interactive busybox shell
+kubectl run -i --tty busybox --image=busybox --restart=Never -- sh
+
+#first app with AWS load balancer
+docker-projects\kubernetes\kubernetes-course\first-app\helloworld-service.yml
+#create the pod, then the service with the ELB
+kubectl create -f helloworld.yml
+kubectl create -f helloworld-service.yml
+
+############################################################################################
+# run kind=ReplicationController instead of kind=pod
+# docker-projects\kubernetes\kubernetes-course\replication-controller
+kubectl create -f helloworld.yml #from first-app
+kubectl create -f helloworld-repl-controller.yml
+kubectl describe pod helloworld-controller-6ckhb
+
+kubectl scale --replicas=4 -f helloworld-repl-controller.yml
+# or
+kubectl get rc
+kubectl scale --replicas=10 rc/helloworld-controller
+kubectl delete rc/helloworld-controller
+
+############################################################################################
+# replica set is next-gen  ReplicationController
+
+############################################################################################
+# deployments are more flexible than replicationcontrollers and replica sets 
+
+docker-projects\kubernetes\kubernetes-course\deployment
+
+kubectl create -f helloworld.yml
+kubectl get deployments
+kubectl get rs
+kubectl get pods --show-labels
+
+kubectl rollout status deployment/helloworld-deployment
+kubectl expose deployment helloworld-deployment --type=NodePort
+
+kubectl get service
+
+kubectl set image deployment/helloworld-deployment k8s-demo=wardviaene/k8s-demo:2
+
+# under spec: insert revisionHistoryLimit: 50 
+kubectl edit deployment/helloworld-deployment
+
+kubectl rollout status
+kubectl rollout history
+kubectl rollout undo
+
+
+########################################################################
+# labels
+kubectl label nodes node1 hardware=high-spec
+kubectl label nodes node2 hardware=low-spec
+
+#then reference label in deployment yml
+docker-projects\kubernetes\kubernetes-course\deployment\helloworld-nodeselector.yml
+
+#show external IPs of nodes
+kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'
+
+####################################################################################
+# status
+
+kubectl get pods --all-namespaces -o wide
+kubectl cluster-info dump
+
+#get full details about pods
+kubectl get pods -o json
+
+#get dashboard
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml
+kubectl proxy --address=192.168.1.169 --accept-hosts="^192\.168\.1\.([0-9]|[1-9][0-9]|1([0-9][0-9])|2([0-4][0-9]|5[0-5]))$"
+http://192.168.1.169:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
+
+#get addresses of nodes
+kubectl get nodes -o json | jq -r '[.items[] | {name:.metadata.name, intid:.status.addresses, id:.spec.externalID, unschedulable:.spec.unschedulable}]'
+
+#########################################################
+# creating secrets
+
+#user/pass
+echo -n "root" > ./username.txt
+echo -n "password" > ./password.txt
+../kubectl create secret generic db-user-pass --from-file=./username-txt --from-file=./password.txt
+
+#ssh key/ssl cert
+kubectl create secret generic ssl-certificate --from-file=ssh-privatekey=~/.ssh/d_rsa --ssl-cert=ssl-cert=mysslcert.crt
+
+#secrets in yaml file
+echo -n "root" | base64
+echo -n "password" | base64
+#hashed contents put in YAML
+docker-projects\kubernetes\kubernetes-course\deployment\helloworld-secrets.yml
+
+
+#########################################################
+# using volumes
+
+aws ec2 create-volume --size 10 --region us-east-1 --availability-zone us-east-1a --volume-type gp2 --tag-specifications 'ResourceType=volume,Tags=[{Key=KubernetesCluster,Value=minckler.de}]'
+# add VolumeID to docker-projects\kubernetes\kubernetes-course\volumes\helloworld-with-volume.yml
